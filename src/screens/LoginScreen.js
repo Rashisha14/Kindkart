@@ -36,6 +36,7 @@ const LoginScreen = ({ navigation }) => {
   const handleLogin = async () => {
     setIsSubmitting(true);
     console.log('Starting login process...');
+    console.log('API URL:', API_URL);
     
     if (validateForm()) {
       try {
@@ -67,14 +68,18 @@ const LoginScreen = ({ navigation }) => {
           console.log('Parsed response data:', data);
         } catch (e) {
           console.error('Error parsing response:', e);
-          throw new Error(`Invalid response from server: ${textResponse}`);
+          Alert.alert(
+            'Error',
+            'Invalid response from server. Please try again.',
+            [{ text: 'OK' }]
+          );
+          return;
         }
 
         if (!response.ok) {
           throw new Error(data.message || 'Failed to login');
         }
 
-        // Store token if remember me is checked
         if (rememberMe) {
           console.log('Storing token and user data...');
           await AsyncStorage.setItem('token', data.token);
@@ -86,12 +91,13 @@ const LoginScreen = ({ navigation }) => {
       } catch (error) {
         console.error('Login error:', {
           message: error.message,
-          stack: error.stack
+          stack: error.stack,
+          name: error.name
         });
         
         Alert.alert(
           'Error',
-          error.message || 'Failed to login. Please try again.',
+          error.message || 'Failed to login. Please check your network connection and try again.',
           [{ text: 'OK' }]
         );
       }
