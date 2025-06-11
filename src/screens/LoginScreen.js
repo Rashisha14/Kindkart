@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, NetInfo } from 'react-native';
 import { TextInput, Button, Text, Surface, Switch, HelperText } from 'react-native-paper';
 import Logo from '../components/Logo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,6 +11,7 @@ const LoginScreen = ({ navigation }) => {
   const [rememberMe, setRememberMe] = useState(false);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [networkError, setNetworkError] = useState(false);
 
   const validateForm = () => {
     const newErrors = {};
@@ -34,77 +35,94 @@ const LoginScreen = ({ navigation }) => {
   };
 
   const handleLogin = async () => {
-    setIsSubmitting(true);
-    console.log('Starting login process...');
-    console.log('API URL:', API_URL);
-    
-    if (validateForm()) {
+    try {
+      setIsSubmitting(true);
+      setNetworkError(false);
+      console.log('Starting login process...');
+      console.log('API URL:', API_URL);
+      
+      if (!validateForm()) {
+        console.log('Form validation failed. Errors:', errors);
+        return;
+      }
+
+      const apiUrl = `${API_URL}/auth/login`;
+      console.log('Making request to:', apiUrl);
+      
+      const requestBody = {
+        email,
+        password,
+      };
+      console.log('Request body:', JSON.stringify(requestBody, null, 2));
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      console.log('Response status:', response.status);
+      const textResponse = await response.text();
+      console.log('Raw response:', textResponse);
+      
+      let data;
       try {
-        const apiUrl = `${API_URL}/auth/login`;
-        console.log('Making request to:', apiUrl);
-        
-        const requestBody = {
-          email,
-          password,
-        };
-        console.log('Request body:', JSON.stringify(requestBody, null, 2));
+        data = JSON.parse(textResponse);
+        console.log('Parsed response data:', data);
+      } catch (e) {
+        console.error('Error parsing response:', e);
+        throw new Error('Server returned an invalid response. Please try again.');
+      }
 
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody)
-        });
-
-        console.log('Response status:', response.status);
-        const textResponse = await response.text();
-        console.log('Raw response:', textResponse);
-        
-        let data;
-        try {
-          data = JSON.parse(textResponse);
-          console.log('Parsed response data:', data);
-        } catch (e) {
-          console.error('Error parsing response:', e);
-          Alert.alert(
-            'Error',
-            'Invalid response from server. Please try again.',
-            [{ text: 'OK' }]
-          );
-          return;
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Invalid email or password');
+        } else if (response.status === 400) {
+          throw new Error(data.message || 'Please check your input and try again');
+        } else {
+          throw new Error(data.message || 'An error occurred while logging in');
         }
+      }
 
-        if (!response.ok) {
-          throw new Error(data.message || 'Failed to login');
-        }
+      // Always store the token
+      console.log('Storing authentication token...');
+      await AsyncStorage.setItem('token', data.token);
 
-        if (rememberMe) {
-          console.log('Storing token and user data...');
-          await AsyncStorage.setItem('token', data.token);
-          await AsyncStorage.setItem('user', JSON.stringify(data.user));
-        }
+      // Store user data only if rememberMe is true
+      if (rememberMe) {
+        console.log('Storing user data...');
+        await AsyncStorage.setItem('user', JSON.stringify(data.user));
+      }
 
-        console.log('Login successful, navigating to Home screen...');
-        navigation.replace('Home');
-      } catch (error) {
-        console.error('Login error:', {
-          message: error.message,
-          stack: error.stack,
-          name: error.name
-        });
-        
+      console.log('Login successful, navigating to Home screen...');
+      navigation.replace('Home');
+    } catch (error) {
+      console.error('Login error:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      
+      if (error.message.includes('Network request failed')) {
+        setNetworkError(true);
         Alert.alert(
-          'Error',
-          error.message || 'Failed to login. Please check your network connection and try again.',
+          'Network Error',
+          'Unable to connect to the server. Please check your internet connection and try again.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Login Failed',
+          error.message || 'An unexpected error occurred. Please try again.',
           [{ text: 'OK' }]
         );
       }
-    } else {
-      console.log('Form validation failed. Errors:', errors);
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   return (

@@ -2,15 +2,53 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const path = require('path');
 const authRoutes = require('./routes/auth');
+const productRoutes = require('./routes/products');
 
 dotenv.config();
 
 const app = express();
 
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // CORS configuration
+const allowedOrigins = [
+  'http://localhost:19000',
+  'http://localhost:19001',
+  'http://localhost:19002',
+  'exp://localhost:19000',
+  'http://192.168.1.37:19000',
+  'http://192.168.1.37:19001',
+  'http://192.168.1.37:19002',
+  'exp://192.168.1.37:19000'
+];
+
 app.use(cors({
-  origin: true, // Allow all origins
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      console.log('Rejected Origin:', origin);
+      console.log('Allowed Origins:', allowedOrigins);
+    }
+    
+    // Allow all origins in development
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      return callback(new Error('CORS policy violation'), false);
+    }
+    return callback(null, true);
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   credentials: true,
@@ -20,12 +58,15 @@ app.use(cors({
 // Request logging middleware
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  if (req.headers.authorization) {
+    console.log('Authorization:', req.headers.authorization.substring(0, 20) + '...');
+  }
   console.log('Headers:', JSON.stringify(req.headers, null, 2));
-  console.log('Body:', req.body);
+  if (!req.path.includes('/upload')) {
+    console.log('Body:', req.body);
+  }
   next();
 });
-
-app.use(express.json());
 
 // Test route
 app.get('/test', (req, res) => {
@@ -42,6 +83,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/kindkart'
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/products', productRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -76,6 +118,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`- Network addresses:`);
   addresses.forEach(addr => console.log(`  http://${addr}:${PORT}`));
   console.log('\n=== CORS Configuration ===');
-  console.log('All origins are allowed in development mode');
+  console.log('Allowed origins in development:', 'All Origins');
+  console.log('Allowed origins in production:', allowedOrigins);
   console.log('======================\n');
 }); 

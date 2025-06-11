@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,15 @@ import {
   FlatList,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { API_URL, BASE_URL } from '../config/api';
 
 // Import SVG icons
-import ElectronicsIcon from '../../assets/icons/electronics.svg';
+import ElectronicsIcon from '../../assets/icons/electronicdevices.svg';
 import ClothesIcon from '../../assets/icons/clothes.svg';
-import DevicesIcon from '../../assets/icons/devices.svg';
+import homeaplliancesIcon from '../../assets/icons/homeaplliances.svg';
 import ToysIcon from '../../assets/icons/toys.svg';
 import FurnitureIcon from '../../assets/icons/furniture.svg';
 import ShoesIcon from '../../assets/icons/shoes.svg';
@@ -23,24 +25,57 @@ import ShoesIcon from '../../assets/icons/shoes.svg';
 const categories = [
   { id: '1', Icon: ElectronicsIcon },
   { id: '2', Icon: ClothesIcon },
-  { id: '3', Icon: DevicesIcon },
+  { id: '3', Icon: homeaplliancesIcon },
   { id: '4', Icon: ToysIcon },
   { id: '5', Icon: FurnitureIcon },
   { id: '6', Icon: ShoesIcon },
 ];
 
-const items = [
-  { id: '1', image: require('../../assets/blue-shirt.png')},
-  { id: '2', image: require('../../assets/grey-shirt.png')},
-  { id: '3', image: require('../../assets/converse.png') },
-  { id: '4', image: require('../../assets/pink-hoodie.png') },
-];
-
 const HomeScreen = ({ navigation }) => {
+  const [nearbyItems, setNearbyItems] = useState([]);
+  const [newArrivals, setNewArrivals] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch(`${API_URL}/products`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch products');
+      }
+      const products = await response.json();
+      
+      // Sort products by creation date for new arrivals
+      const sortedByDate = [...products].sort((a, b) => 
+        new Date(b.createdAt) - new Date(a.createdAt)
+      );
+      
+      // Get the 10 most recent items for new arrivals
+      setNewArrivals(sortedByDate.slice(0, 10));
+      
+      // For now, use the same products for nearby items
+      // In a real app, you would filter based on location
+      setNearbyItems(products.slice(0, 10));
+      
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      setLoading(false);
+    }
+  };
+
   const renderItem = ({ item }) => (
     <TouchableOpacity style={styles.itemCard}>
-      <Image source={item.image} style={styles.itemImage} resizeMode="cover" />
-      <Text style={styles.itemName}>{item.name}</Text>
+      <Image 
+        source={{ uri: `${BASE_URL}${item.imageUrl}` }} 
+        style={styles.itemImage} 
+        resizeMode="cover" 
+      />
+      <Text style={styles.itemName}>{item.title}</Text>
+      <Text style={styles.itemPrice}>₹{item.price}</Text>
     </TouchableOpacity>
   );
 
@@ -73,13 +108,17 @@ const HomeScreen = ({ navigation }) => {
         {/* Items near you */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Items near you</Text>
-          <FlatList
-            data={items}
-            renderItem={renderItem}
-            keyExtractor={item => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-          />
+          {loading ? (
+            <ActivityIndicator size="large" color="#FF4B81" />
+          ) : (
+            <FlatList
+              data={nearbyItems}
+              renderItem={renderItem}
+              keyExtractor={item => item._id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+            />
+          )}
         </View>
 
         {/* Shop by category */}
@@ -95,20 +134,27 @@ const HomeScreen = ({ navigation }) => {
         </View>
 
         {/* Post Item Button */}
-        <TouchableOpacity style={styles.postButton}>
+        <TouchableOpacity 
+          style={styles.postButton}
+          onPress={() => navigation.navigate('SellProduct')}
+        >
           <Text style={styles.postButtonText}>+ Post a Free Item</Text>
         </TouchableOpacity>
 
         {/* New arrivals */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>New arrivals</Text>
-          <FlatList
-            data={items}
-            renderItem={renderItem}
-            keyExtractor={item => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-          />
+          {loading ? (
+            <ActivityIndicator size="large" color="#FF4B81" />
+          ) : (
+            <FlatList
+              data={newArrivals}
+              renderItem={renderItem}
+              keyExtractor={item => item._id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+            />
+          )}
         </View>
 
         {/* Donate Food Section */}
@@ -209,15 +255,23 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    width: 150,
   },
   itemImage: {
-    width: 150,
-    height: 150,
+    width: 134,
+    height: 134,
     borderRadius: 8,
   },
   itemName: {
     marginTop: 8,
     fontSize: 14,
+    fontWeight: '500',
+  },
+  itemPrice: {
+    marginTop: 4,
+    fontSize: 14,
+    color: '#FF4B81',
+    fontWeight: 'bold',
   },
   categoryGrid: {
     flexDirection: 'row',
