@@ -59,10 +59,17 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-// Get all products
+// Get all products with optional category filter
 router.get('/', async (req, res) => {
   try {
-    const products = await Product.find()
+    const { category } = req.query;
+    let query = {};
+    
+    if (category) {
+      query.category = category;
+    }
+    
+    const products = await Product.find(query)
       .populate('owner', 'name email')
       .sort({ createdAt: -1 });
     res.json(products);

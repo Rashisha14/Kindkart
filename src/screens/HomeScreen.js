@@ -10,9 +10,11 @@ import {
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { API_URL, BASE_URL } from '../config/api';
+import ProductDetailModal from '../components/ProductDetailModal';
 
 // Import SVG icons
 import ElectronicsIcon from '../../assets/icons/electronicdevices.svg';
@@ -23,18 +25,20 @@ import FurnitureIcon from '../../assets/icons/furniture.svg';
 import ShoesIcon from '../../assets/icons/shoes.svg';
 
 const categories = [
-  { id: '1', Icon: ElectronicsIcon },
-  { id: '2', Icon: ClothesIcon },
-  { id: '3', Icon: homeaplliancesIcon },
-  { id: '4', Icon: ToysIcon },
-  { id: '5', Icon: FurnitureIcon },
-  { id: '6', Icon: ShoesIcon },
+  { id: '1', name: 'Electronic Devices', Icon: ElectronicsIcon },
+  { id: '2', name: 'Clothes', Icon: ClothesIcon },
+  { id: '3', name: 'Home Appliances', Icon: homeaplliancesIcon },
+  { id: '4', name: 'Toys', Icon: ToysIcon },
+  { id: '5', name: 'Furniture', Icon: FurnitureIcon },
+  { id: '6', name: 'Shoes', Icon: ShoesIcon },
 ];
 
 const HomeScreen = ({ navigation }) => {
   const [nearbyItems, setNearbyItems] = useState([]);
   const [newArrivals, setNewArrivals] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -67,8 +71,40 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
+  const handleProductPress = (product) => {
+    setSelectedProduct(product);
+    setModalVisible(true);
+  };
+
+  const handleContact = async (product) => {
+    try {
+      Alert.alert(
+        'Contact Seller',
+        `Would you like to contact the seller about "${product.title}"?`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Contact',
+            onPress: () => {
+              Alert.alert('Contact', `Contact the seller at: ${product.owner.email}`);
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error contacting seller:', error);
+      Alert.alert('Error', 'Could not contact the seller. Please try again.');
+    }
+  };
+
   const renderItem = ({ item }) => (
-    <TouchableOpacity style={styles.itemCard}>
+    <TouchableOpacity 
+      style={styles.itemCard}
+      onPress={() => handleProductPress(item)}
+    >
       <Image 
         source={{ uri: `${BASE_URL}${item.imageUrl}` }} 
         style={styles.itemImage} 
@@ -80,8 +116,12 @@ const HomeScreen = ({ navigation }) => {
   );
 
   const renderCategory = ({ item }) => (
-    <TouchableOpacity style={styles.categoryCard}>
+    <TouchableOpacity 
+      style={styles.categoryCard}
+      onPress={() => navigation.navigate('Category', { category: item.name })}
+    >
       <item.Icon width={32} height={32} fill="#FF4B81" />
+      <Text style={styles.categoryName}>{item.name}</Text>
     </TouchableOpacity>
   );
 
@@ -214,6 +254,17 @@ const HomeScreen = ({ navigation }) => {
           <Ionicons name="cart" size={24} color="#666" />
         </TouchableOpacity>
       </View>
+
+      {/* Product Detail Modal */}
+      <ProductDetailModal
+        visible={modalVisible}
+        product={selectedProduct}
+        onClose={() => {
+          setModalVisible(false);
+          setSelectedProduct(null);
+        }}
+        onContact={handleContact}
+      />
     </SafeAreaView>
   );
 };
@@ -288,12 +339,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 8,
     padding: 16,
-    height: 70,
+    height: 90,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+  },
+  categoryName: {
+    marginTop: 8,
+    fontSize: 12,
+    textAlign: 'center',
+    color: '#333',
   },
   postButton: {
     backgroundColor: '#FF4B81',
