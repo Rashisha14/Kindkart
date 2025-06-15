@@ -170,9 +170,9 @@ const HomeScreen = ({ navigation }) => {
       </View>
 
       <ScrollView style={styles.scrollView}>
-        {/* Items near you */}
+        {/* New arrivals */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Items near you</Text>
+          <Text style={styles.sectionTitle}>New arrivals</Text>
           {loading ? (
             <ActivityIndicator size="large" color="#FF4B81" />
           ) : (
@@ -206,9 +206,9 @@ const HomeScreen = ({ navigation }) => {
           <Text style={styles.postButtonText}>+ Post a Free Item</Text>
         </TouchableOpacity>
 
-        {/* New arrivals */}
+        {/* Items near you */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>New arrivals</Text>
+          <Text style={styles.sectionTitle}>Items near you</Text>
           {loading ? (
             <ActivityIndicator size="large" color="#FF4B81" />
           ) : (

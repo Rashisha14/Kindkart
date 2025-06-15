@@ -91,11 +91,27 @@ const AccountDetailsScreen = ({ navigation }) => {
       const boughtItemsStr = await AsyncStorage.getItem(boughtItemsKey);
       if (boughtItemsStr) {
         const boughtItems = JSON.parse(boughtItemsStr);
-        // Get all bought items that are marked as sold
-        const boughtProducts = products.filter(product => 
-          product.isSold && boughtItems[product._id]
+        const boughtItemIds = Object.keys(boughtItems);
+        
+        // Fetch all products to find purchased items
+        const allProductsResponse = await fetch(`${API_URL}/products`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (!allProductsResponse.ok) {
+          throw new Error('Failed to fetch products for purchase history');
+        }
+
+        const allProducts = await allProductsResponse.json();
+        
+        // Filter products that are marked as sold and in user's purchase history
+        const purchasedProducts = allProducts.filter(product => 
+          product.isSold && boughtItemIds.includes(product._id)
         );
-        setPurchaseHistory(boughtProducts);
+        
+        setPurchaseHistory(purchasedProducts);
       }
 
     } catch (error) {
@@ -122,47 +138,103 @@ const AccountDetailsScreen = ({ navigation }) => {
   };
 
   const handleMarkAsSold = async (productId) => {
-    Alert.alert(
-      'Mark as Sold',
-      `Are you sure you want to mark this item as SOLD?\nThis action cannot be undone.`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Mark Sold',
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem('token');
-              if (!token) {
-                Alert.alert('Authentication Error', 'Please login again.');
-                return;
-              }
+    const productInterests = buyInterests[productId] || [];
+    
+    if (productInterests.length === 0) {
+      Alert.alert('No Buyers', 'There are no interested buyers for this item.');
+      return;
+    }
 
-              const response = await fetch(`${API_URL}/products/${productId}/mark-sold`, {
-                method: 'PUT',
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                },
-              });
-
-              if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to mark product as sold');
-              }
-
-              Alert.alert('Success', 'Product successfully marked as sold!');
-              // Refresh data after marking as sold
-              fetchUserDataAndProducts();
-            } catch (error) {
-              console.error('Error marking product as sold:', error);
-              Alert.alert('Error', error.message || 'Failed to mark product as sold. Please try again.');
-            }
+    if (productInterests.length === 1) {
+      // If only one buyer, proceed with confirmation
+      Alert.alert(
+        'Mark as Sold',
+        `Are you sure you want to mark this item as SOLD to ${productInterests[0].buyer.name}?\nThis action cannot be undone.`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
           },
+          {
+            text: 'Mark Sold',
+            onPress: () => markAsSoldToBuyer(productId, productInterests[0].buyer._id),
+          },
+        ]
+      );
+    } else {
+      // If multiple buyers, show selection dialog
+      Alert.alert(
+        'Select Buyer',
+        'Choose the buyer to sell this item to:',
+        [
+          ...productInterests.map((interest) => ({
+            text: `${interest.buyer.name} (${interest.buyer.email})`,
+            onPress: () => {
+              Alert.alert(
+                'Confirm Sale',
+                `Are you sure you want to mark this item as SOLD to ${interest.buyer.name}?\nThis action cannot be undone.`,
+                [
+                  {
+                    text: 'Cancel',
+                    style: 'cancel',
+                  },
+                  {
+                    text: 'Mark Sold',
+                    onPress: () => markAsSoldToBuyer(productId, interest.buyer._id),
+                  },
+                ]
+              );
+            },
+          })),
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+        ]
+      );
+    }
+  };
+
+  const markAsSoldToBuyer = async (productId, buyerId) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        Alert.alert('Authentication Error', 'Please login again.');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/products/${productId}/mark-sold`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
-      ]
-    );
+        body: JSON.stringify({ buyerId }), // Send the selected buyer's ID
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to mark product as sold');
+      }
+
+      // Update the buyer's purchase history
+      const userData = await AsyncStorage.getItem('userData');
+      if (userData) {
+        const user = JSON.parse(userData);
+        const boughtItemsKey = `bought_items_${buyerId}`;
+        const boughtItems = await AsyncStorage.getItem(boughtItemsKey);
+        const updatedBoughtItems = boughtItems ? JSON.parse(boughtItems) : {};
+        updatedBoughtItems[productId] = true;
+        await AsyncStorage.setItem(boughtItemsKey, JSON.stringify(updatedBoughtItems));
+      }
+
+      Alert.alert('Success', 'Product successfully marked as sold!');
+      // Refresh data after marking as sold
+      fetchUserDataAndProducts();
+    } catch (error) {
+      console.error('Error marking product as sold:', error);
+      Alert.alert('Error', error.message || 'Failed to mark product as sold. Please try again.');
+    }
   };
 
   return (
@@ -219,7 +291,18 @@ const AccountDetailsScreen = ({ navigation }) => {
                     <Text style={styles.purchaseHistoryTitle}>{product.title}</Text>
                     <Text style={styles.purchaseHistoryPrice}>₹{product.price}</Text>
                     <Text style={styles.purchaseHistoryStatus}>Status: Sold</Text>
-                    <Text style={styles.purchaseHistorySeller}>Seller: {product.owner.name}</Text>
+                    <View style={styles.sellerInfo}>
+                      <Text style={styles.sellerInfoTitle}>Seller Details:</Text>
+                      <Text style={styles.sellerInfoText}>Name: {product.owner.name}</Text>
+                      <Text style={styles.sellerInfoText}>Email: {product.owner.email}</Text>
+                      <Text style={styles.sellerInfoText}>Phone: {product.owner.phone}</Text>
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.contactSellerButton}
+                      onPress={() => handleContact(product)}
+                    >
+                      <Text style={styles.contactSellerButtonText}>Contact Seller</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               ))
@@ -229,7 +312,7 @@ const AccountDetailsScreen = ({ navigation }) => {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Listed Items</Text>
+            <Text style={styles.sectionTitle}>Listed Products</Text>
             {listedProducts.length > 0 ? (
               listedProducts.map((product) => {
                 const productInterests = buyInterests[product._id] || [];
@@ -237,12 +320,10 @@ const AccountDetailsScreen = ({ navigation }) => {
                 const isExpanded = expandedProduct === product._id;
 
                 return (
-                  <TouchableOpacity 
-                    key={product._id} 
-                    style={[styles.productCard, hasInterests && styles.interestedProductCard]}
-                    onPress={() => toggleProductExpansion(product._id)}
-                    activeOpacity={hasInterests ? 0.7 : 1} // Only active if has interests
-                  >
+                  <View key={product._id} style={[
+                    styles.productCard,
+                    product.isSold && styles.soldProductCard
+                  ]}>
                     <Image
                       source={{ uri: `${BASE_URL}${product.imageUrl}` }}
                       style={styles.productImage}
@@ -250,29 +331,33 @@ const AccountDetailsScreen = ({ navigation }) => {
                     <View style={styles.productInfo}>
                       <Text style={styles.productTitle}>{product.title}</Text>
                       <Text style={styles.productPrice}>₹{product.price}</Text>
-                      <Text style={[styles.productStatus, product.isSold && styles.soldStatus]}>Status: {product.isSold ? 'Sold' : 'Active'} {hasInterests && !product.isSold && '(Has Interest)'}</Text>
+                      <Text style={[styles.productStatus, product.isSold && styles.soldStatus]}>
+                        Status: {product.isSold ? 'Sold' : 'Active'} {hasInterests && !product.isSold && '(Has Interest)'}
+                      </Text>
 
                       {product.isSold && productInterests.length > 0 && (
-                        <View style={styles.soldToSection}>
-                          <Text style={styles.soldToTitle}>Sold to:</Text>
-                          <View style={styles.buyerInfoRow}>
-                            <Ionicons name="person-circle-outline" size={18} color="#FF4B81" style={styles.buyerInfoIcon} />
-                            <View>
-                              <Text style={styles.buyerInfoText}><Text style={styles.buyerInfoLabel}>Name:</Text> {productInterests[0].buyer.name}</Text>
-                              <Text style={styles.buyerInfoText}><Text style={styles.buyerInfoLabel}>Email:</Text> {productInterests[0].buyer.email}</Text>
-                              <Text style={styles.buyerInfoText}><Text style={styles.buyerInfoLabel}>Phone:</Text> {productInterests[0].buyer.phone}</Text>
-                            </View>
-                          </View>
+                        <View style={styles.sellerInfo}>
+                          <Text style={styles.sellerInfoTitle}>Sold to:</Text>
+                          <Text style={styles.sellerInfoText}>Name: {productInterests[0].buyer.name}</Text>
+                          <Text style={styles.sellerInfoText}>Email: {productInterests[0].buyer.email}</Text>
+                          <Text style={styles.sellerInfoText}>Phone: {productInterests[0].buyer.phone}</Text>
                         </View>
                       )}
 
                       {hasInterests && !product.isSold && (
-                        <Ionicons 
-                          name={isExpanded ? "chevron-up-outline" : "chevron-down-outline"} 
-                          size={20} 
-                          color="#FF4B81" 
-                          style={styles.expandIcon}
-                        />
+                        <TouchableOpacity 
+                          style={styles.expandButton}
+                          onPress={() => toggleProductExpansion(product._id)}
+                        >
+                          <Text style={styles.expandButtonText}>
+                            {isExpanded ? 'Hide Interests' : 'Show Interests'}
+                          </Text>
+                          <Ionicons 
+                            name={isExpanded ? "chevron-up-outline" : "chevron-down-outline"} 
+                            size={20} 
+                            color="#FF4B81" 
+                          />
+                        </TouchableOpacity>
                       )}
 
                       {isExpanded && hasInterests && !product.isSold && (
@@ -280,26 +365,24 @@ const AccountDetailsScreen = ({ navigation }) => {
                           <Text style={styles.buyerInterestTitle}>Interested Buyers:</Text>
                           {productInterests.map((interest) => (
                             <View key={interest._id} style={styles.buyerInfoRow}>
-                              <Ionicons name="person-circle-outline" size={18} color="#FF4B81" style={styles.buyerInfoIcon} />
-                              <View>
-                                <Text style={styles.buyerInfoText}><Text style={styles.buyerInfoLabel}>Name:</Text> {interest.buyer.name}</Text>
-                                <Text style={styles.buyerInfoText}><Text style={styles.buyerInfoLabel}>Email:</Text> {interest.buyer.email}</Text>
-                                <Text style={styles.buyerInfoText}><Text style={styles.buyerInfoLabel}>Phone:</Text> {interest.buyer.phone}</Text>
+                              <View style={styles.sellerInfo}>
+                                <Text style={styles.sellerInfoText}>Name: {interest.buyer.name}</Text>
+                                <Text style={styles.sellerInfoText}>Email: {interest.buyer.email}</Text>
+                                <Text style={styles.sellerInfoText}>Phone: {interest.buyer.phone}</Text>
+                                <Text style={styles.sellerInfoText}>Payment: {interest.paymentMethod}</Text>
                               </View>
+                              <TouchableOpacity 
+                                style={styles.markSoldButton}
+                                onPress={() => handleMarkAsSold(product._id)}
+                              >
+                                <Text style={styles.markSoldButtonText}>Mark as Sold</Text>
+                              </TouchableOpacity>
                             </View>
                           ))}
-                          {!product.isSold && (
-                            <TouchableOpacity 
-                              style={styles.markSoldButton}
-                              onPress={() => handleMarkAsSold(product._id)}
-                            >
-                              <Text style={styles.markSoldButtonText}>Mark as Sold</Text>
-                            </TouchableOpacity>
-                          )}
                         </View>
                       )}
                     </View>
-                  </TouchableOpacity>
+                  </View>
                 );
               })
             ) : (
@@ -381,27 +464,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderRadius: 8,
-    marginBottom: 10,
+    marginBottom: 16,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#eee',
-    alignItems: 'center',
-    padding: 10,
+    padding: 12,
   },
-  interestedProductCard: {
-    backgroundColor: '#E6F7E9', // A lighter green for interest
-    borderColor: '#4CAF50', // Green border
-    borderWidth: 2,
+  soldProductCard: {
+    backgroundColor: '#FFF5F5', // Light red background for sold items
+    borderColor: '#FFE0E0', // Lighter red border
   },
   productImage: {
-    width: 80,
-    height: 80,
+    width: 100,
+    height: 100,
     borderRadius: 8,
     marginRight: 15,
   },
   productInfo: {
     flex: 1,
-    paddingVertical: 10,
   },
   productTitle: {
     fontSize: 16,
@@ -418,10 +498,10 @@ const styles = StyleSheet.create({
   productStatus: {
     fontSize: 13,
     color: '#666',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   soldStatus: {
-    color: '#DC3545', // Red color for sold status
+    color: '#DC3545',
     fontWeight: 'bold',
   },
   noItemsText: {
@@ -430,9 +510,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 20,
   },
+  expandButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    padding: 8,
+    borderRadius: 6,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  expandButtonText: {
+    color: '#FF4B81',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginRight: 4,
+  },
   buyerInterestSection: {
-    marginTop: 10,
-    paddingTop: 10,
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#eee',
   },
@@ -443,68 +538,64 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   buyerInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-    paddingVertical: 3,
-  },
-  buyerInfoIcon: {
-    marginRight: 10,
-    marginTop: 2, // Align icon with the top of the text block
-  },
-  buyerInfoText: {
-    fontSize: 16,
-    color: '#333',
-    flexShrink: 1, // Allows text to wrap
-  },
-  buyerInfoLabel: {
-    fontWeight: 'bold',
-  },
-  expandIcon: {
-    position: 'absolute',
-    right: 0,
-    top: 10,
+    marginBottom: 12,
   },
   markSoldButton: {
-    backgroundColor: '#28a745', // Green color
-    paddingVertical: 10,
+    backgroundColor: '#28a745',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 20,
-    marginTop: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 8,
+    alignSelf: 'flex-start',
   },
   markSoldButtonText: {
-    color: 'white',
-    fontSize: 16,
+    color: '#fff',
+    fontSize: 14,
     fontWeight: 'bold',
   },
-  soldToSection: {
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
+  sellerInfo: {
+    backgroundColor: '#f8f9fa',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 8,
   },
-  soldToTitle: {
-    fontSize: 15,
+  sellerInfoTitle: {
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  sellerInfoText: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 2,
+  },
+  contactSellerButton: {
+    backgroundColor: '#FF4B81',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  contactSellerButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   // Purchase History Styles
   purchaseHistoryCard: {
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderRadius: 8,
-    marginBottom: 10,
+    marginBottom: 16,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#eee',
-    alignItems: 'center',
-    padding: 10,
+    padding: 12,
   },
   purchaseHistoryImage: {
-    width: 80,
-    height: 80,
+    width: 100,
+    height: 100,
     borderRadius: 8,
     marginRight: 15,
   },
@@ -527,11 +618,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#DC3545',
     fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  purchaseHistorySeller: {
-    fontSize: 13,
-    color: '#666',
+    marginBottom: 8,
   },
 });
 

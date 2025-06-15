@@ -107,6 +107,11 @@ router.put('/:id/mark-sold', auth, async (req, res) => {
   try {
     const productId = req.params.id;
     const userId = req.user._id; // Authenticated user's ID
+    const { buyerId } = req.body; // Get the buyer ID from request body
+
+    if (!buyerId) {
+      return res.status(400).json({ message: 'Buyer ID is required' });
+    }
 
     const product = await Product.findById(productId);
 
@@ -123,7 +128,9 @@ router.put('/:id/mark-sold', auth, async (req, res) => {
       return res.status(400).json({ message: 'Product is already marked as sold' });
     }
 
+    // Update product with sold status and buyer information
     product.isSold = true;
+    product.soldTo = buyerId; // Store the buyer's ID
     await product.save();
 
     res.json({ message: 'Product marked as sold successfully', product });
