@@ -22,6 +22,8 @@ const CartScreen = ({ navigation }) => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
+  const [boughtItems, setBoughtItems] = useState({}); // Stores {itemId: true} for bought items
 
   useEffect(() => {
     loadUserAndCart();
@@ -41,6 +43,13 @@ const CartScreen = ({ navigation }) => {
         if (cart) {
           setCartItems(JSON.parse(cart));
         }
+
+        // Load bought items for the current user
+        const boughtItemsKey = `bought_items_${user._id}`;
+        const storedBoughtItems = await AsyncStorage.getItem(boughtItemsKey);
+        if (storedBoughtItems) {
+          setBoughtItems(JSON.parse(storedBoughtItems));
+        }
       }
       setLoading(false);
     } catch (error) {
@@ -59,6 +68,12 @@ const CartScreen = ({ navigation }) => {
       setCartItems(updatedItems);
       setShowDetails(false);
       setSelectedItem(null);
+      // Also remove from bought items if it was there
+      const newBoughtItems = { ...boughtItems };
+      delete newBoughtItems[itemId];
+      const boughtItemsKey = `bought_items_${currentUser._id}`;
+      await AsyncStorage.setItem(boughtItemsKey, JSON.stringify(newBoughtItems));
+      setBoughtItems(newBoughtItems);
     } catch (error) {
       console.error('Error removing item from cart:', error);
       Alert.alert('Error', 'Failed to remove item from cart');
@@ -94,28 +109,64 @@ const CartScreen = ({ navigation }) => {
     }
     setSelectedItem(item);
     setShowDetails(true);
+    setSelectedPaymentMethod(null); // Reset payment method when opening new details
   };
 
   const handlePayment = (method) => {
-    Alert.alert(
-      'Payment Method',
-      `You selected ${method} payment. Proceed with payment?`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
+    setSelectedPaymentMethod(method);
+  };
+
+  const handleBuyNow = async () => {
+    if (!selectedItem || !selectedPaymentMethod) {
+      Alert.alert('Error', 'Please select a payment method first.');
+      return;
+    }
+
+    if (!currentUser) {
+      Alert.alert('Login Required', 'Please login to proceed with buying.');
+      return;
+    }
+
+    try {
+      // Record buy interest on the backend
+      const token = await AsyncStorage.getItem('token');
+      const response = await fetch(`${BASE_URL}/buyinterests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
-        {
-          text: 'Proceed',
-          onPress: () => {
-            // Here you would implement the actual payment logic
-            Alert.alert('Success', 'Payment processed successfully!');
-            setShowDetails(false);
-            setSelectedItem(null);
+        body: JSON.stringify({
+          productId: selectedItem._id,
+          paymentMethod: selectedPaymentMethod,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to record buy interest');
+      }
+
+      // Mark item as bought for the current user in local storage
+      const newBoughtItems = { ...boughtItems, [selectedItem._id]: true };
+      setBoughtItems(newBoughtItems);
+      const boughtItemsKey = `bought_items_${currentUser._id}`;
+      await AsyncStorage.setItem(boughtItemsKey, JSON.stringify(newBoughtItems));
+
+      Alert.alert(
+        'Success',
+        'Your interest has been recorded! Seller details are now visible. Please contact the seller directly.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {},
           },
-        },
-      ]
-    );
+        ]
+      );
+    } catch (error) {
+      console.error('Error recording buy interest:', error);
+      Alert.alert('Error', error.message || 'Failed to record your interest. Please try again.');
+    }
   };
 
   const renderItem = ({ item }) => (
@@ -142,75 +193,107 @@ const CartScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
-  const renderDetailsModal = () => (
-    <Modal
-      visible={showDetails}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={() => setShowDetails(false)}
-    >
-      <SafeAreaView style={styles.modalContainer}>
-        <View style={styles.modalContent}>
-          <TouchableOpacity 
-            style={styles.closeButton}
-            onPress={() => setShowDetails(false)}
-          >
-            <Ionicons name="close" size={24} color="#666" />
-          </TouchableOpacity>
+  const renderDetailsModal = () => {
+    const isAlreadyBought = boughtItems[selectedItem?._id];
 
-          <ScrollView style={styles.detailsScroll}>
-            {/* Product Image */}
-            <Image
-              source={{ uri: `${BASE_URL}${selectedItem?.imageUrl}` }}
-              style={styles.detailImage}
-              resizeMode="contain"
-            />
+    return (
+      <Modal
+        visible={showDetails}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowDetails(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setShowDetails(false)}
+            >
+              <Ionicons name="close" size={24} color="#666" />
+            </TouchableOpacity>
 
-            {/* Product Details */}
-            <View style={styles.detailSection}>
-              <Text style={styles.detailTitle}>{selectedItem?.title}</Text>
-              <Text style={styles.detailPrice}>₹{selectedItem?.price}</Text>
-              <Text style={styles.detailDescription}>{selectedItem?.description}</Text>
-            </View>
+            <ScrollView style={styles.detailsScroll}>
+              {/* Product Image */}
+              <Image
+                source={{ uri: `${BASE_URL}${selectedItem?.imageUrl}` }}
+                style={styles.detailImage}
+                resizeMode="contain"
+              />
 
-            {/* Owner Details */}
-            <View style={styles.detailSection}>
-              <Text style={styles.sectionTitle}>Owner Details</Text>
-              <View style={styles.ownerInfo}>
-                <Text style={styles.ownerLabel}>Name:</Text>
-                <Text style={styles.ownerValue}>{selectedItem?.owner.name}</Text>
+              {/* Product Details */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailTitle}>{selectedItem?.title}</Text>
+                <Text style={styles.detailPrice}>₹{selectedItem?.price}</Text>
+                <Text style={styles.detailDescription}>{selectedItem?.description}</Text>
               </View>
-              <View style={styles.ownerInfo}>
-                <Text style={styles.ownerLabel}>Email:</Text>
-                <Text style={styles.ownerValue}>{selectedItem?.owner.email}</Text>
-              </View>
-              <View style={styles.ownerInfo}>
-                <Text style={styles.ownerLabel}>UPI ID:</Text>
-                <Text style={styles.ownerValue}>{selectedItem?.upiId}</Text>
-              </View>
-            </View>
 
-            {/* Payment Options */}
-            <View style={styles.detailSection}>
-              <Text style={styles.sectionTitle}>Payment Options</Text>
-              <TouchableOpacity 
-                style={styles.paymentButton}
-                onPress={() => handlePayment('UPI')}
-              >
-                <Text style={styles.paymentButtonText}>Pay with UPI</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.paymentButton}
-                onPress={() => handlePayment('Cash on Delivery')}
-              >
-                <Text style={styles.paymentButtonText}>Cash on Delivery</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </View>
-      </SafeAreaView>
-    </Modal>
-  );
+              {/* Owner Details (always shown now) */}
+              <View style={styles.detailSection}>
+                <Text style={styles.sectionTitle}>Owner Details</Text>
+                <View style={styles.ownerInfo}>
+                  <Text style={styles.ownerLabel}>Name:</Text>
+                  <Text style={styles.ownerValue}>{selectedItem?.owner.name}</Text>
+                </View>
+                <View style={styles.ownerInfo}>
+                  <Text style={styles.ownerLabel}>Email:</Text>
+                  <Text style={styles.ownerValue}>{selectedItem?.owner.email}</Text>
+                </View>
+                <View style={styles.ownerInfo}>
+                  <Text style={styles.ownerLabel}>Phone:</Text>
+                  <Text style={styles.ownerValue}>{selectedItem?.owner.phone}</Text>
+                </View>
+                {selectedPaymentMethod === 'UPI' && (
+                  <View style={styles.ownerInfo}>
+                    <Text style={styles.ownerLabel}>UPI ID:</Text>
+                    <Text style={styles.ownerValue}>{selectedItem?.upiId}</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Payment Options / Buy Section */}
+              <View style={styles.detailSection}>
+                {!isAlreadyBought ? (
+                  <>
+                    <Text style={styles.sectionTitle}>Select Payment Method</Text>
+                    <TouchableOpacity 
+                      style={[styles.paymentButton, selectedPaymentMethod === 'UPI' && styles.selectedPaymentButton]}
+                      onPress={() => handlePayment('UPI')}
+                    >
+                      <Text style={[styles.paymentButtonText, selectedPaymentMethod === 'UPI' && styles.selectedPaymentButtonText]}>Pay with UPI</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.paymentButton, selectedPaymentMethod === 'Cash on Delivery' && styles.selectedPaymentButton]}
+                      onPress={() => handlePayment('Cash on Delivery')}
+                    >
+                      <Text style={[styles.paymentButtonText, selectedPaymentMethod === 'Cash on Delivery' && styles.selectedPaymentButtonText]}>Cash on Delivery</Text>
+                    </TouchableOpacity>
+                    
+                    {selectedPaymentMethod && (
+                      <TouchableOpacity 
+                        style={styles.buyNowButton}
+                        onPress={handleBuyNow}
+                      >
+                        <Text style={styles.buyNowButtonText}>Buy Now</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.sectionTitle}>Transaction Details</Text>
+                    <Text style={styles.boughtMessage}>You have expressed interest in this item. Please contact the seller directly.</Text>
+                    <View style={styles.ownerInfo}>
+                      <Text style={styles.ownerLabel}>Selected Method:</Text>
+                      <Text style={styles.ownerValue}>{selectedPaymentMethod}</Text>
+                    </View>
+                  </>
+                )}
+              </View>
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      </Modal>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -248,12 +331,11 @@ const CartScreen = ({ navigation }) => {
           data={cartItems}
           renderItem={renderItem}
           keyExtractor={item => item._id}
-          contentContainerStyle={styles.cartList}
-          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
         />
       )}
 
-      {renderDetailsModal()}
+      {selectedItem && renderDetailsModal()}
     </SafeAreaView>
   );
 };
@@ -261,27 +343,27 @@ const CartScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#f8f8f8',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#FF4B81',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    elevation: 4,
-  },
-  backButton: {
-    padding: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    paddingTop: StatusBar.currentHeight + 10,
   },
   headerTitle: {
+    color: 'white',
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+  },
+  backButton: {
+    padding: 5,
   },
   placeholder: {
-    width: 40,
+    width: 24,
   },
   loadingContainer: {
     flex: 1,
@@ -296,35 +378,37 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 18,
-    color: '#666',
-    marginTop: 16,
-    marginBottom: 24,
+    color: '#888',
+    marginTop: 10,
   },
   continueShoppingButton: {
     backgroundColor: '#FF4B81',
-    paddingHorizontal: 24,
     paddingVertical: 12,
+    paddingHorizontal: 25,
     borderRadius: 25,
+    marginTop: 20,
   },
   continueShoppingText: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
   },
-  cartList: {
-    padding: 16,
+  listContent: {
+    paddingHorizontal: 10,
+    paddingTop: 10,
   },
   cartItem: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    borderRadius: 12,
-    marginBottom: 16,
-    padding: 12,
-    elevation: 2,
+    borderRadius: 10,
+    marginBottom: 10,
+    padding: 10,
+    alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+    elevation: 2,
   },
   itemImage: {
     width: 80,
@@ -333,109 +417,147 @@ const styles = StyleSheet.create({
   },
   itemDetails: {
     flex: 1,
-    marginLeft: 12,
-    justifyContent: 'center',
+    marginLeft: 15,
   },
   itemTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 4,
+    color: '#333',
   },
   itemPrice: {
-    fontSize: 18,
+    fontSize: 14,
     color: '#FF4B81',
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginTop: 5,
   },
   ownerInfo: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
+    marginTop: 3,
   },
   removeButton: {
     padding: 8,
-    justifyContent: 'center',
   },
   modalContainer: {
     flex: 1,
+    justifyContent: 'flex-end',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
-    flex: 1,
-    backgroundColor: 'white',
-    marginTop: 50,
+    backgroundColor: '#f8f8f8',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+    height: '90%',
+    paddingTop: 20,
   },
   closeButton: {
     position: 'absolute',
-    top: 20,
-    right: 20,
+    top: 15,
+    right: 15,
     zIndex: 1,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 20,
-    padding: 8,
+    padding: 10,
   },
   detailsScroll: {
-    flex: 1,
-    padding: 20,
+    paddingHorizontal: 20,
   },
   detailImage: {
     width: '100%',
-    height: 300,
-    borderRadius: 12,
+    height: 250,
+    borderRadius: 10,
     marginBottom: 20,
+    backgroundColor: '#eee',
   },
   detailSection: {
-    marginBottom: 24,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+    elevation: 2,
   },
   detailTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 8,
+    marginBottom: 5,
     color: '#333',
   },
   detailPrice: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 18,
     color: '#FF4B81',
-    marginBottom: 12,
+    fontWeight: 'bold',
+    marginBottom: 10,
   },
   detailDescription: {
-    fontSize: 16,
-    color: '#666',
-    lineHeight: 24,
+    fontSize: 15,
+    color: '#555',
+    lineHeight: 22,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: 'bold',
-    marginBottom: 16,
     color: '#333',
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingBottom: 8,
   },
   ownerInfo: {
     flexDirection: 'row',
-    marginBottom: 12,
+    alignItems: 'center',
+    marginBottom: 8,
   },
   ownerLabel: {
-    width: 80,
-    fontSize: 16,
-    color: '#666',
+    fontWeight: 'bold',
+    marginRight: 5,
+    color: '#555',
   },
   ownerValue: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
+    color: '#666',
+    fontSize: 15,
   },
   paymentButton: {
-    backgroundColor: '#FF4B81',
-    borderRadius: 25,
-    paddingVertical: 15,
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
     alignItems: 'center',
-    marginBottom: 12,
   },
   paymentButtonText: {
-    color: 'white',
     fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
+  selectedPaymentButton: {
+    backgroundColor: '#FF4B81',
+    borderColor: '#FF4B81',
+  },
+  selectedPaymentButtonText: {
+    color: 'white',
+  },
+  buyNowButton: {
+    backgroundColor: '#28a745',
+    paddingVertical: 15,
+    borderRadius: 25,
+    marginTop: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buyNowButtonText: {
+    color: 'white',
+    fontSize: 18,
     fontWeight: 'bold',
+  },
+  boughtMessage: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 15,
   },
 });
 

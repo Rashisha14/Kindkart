@@ -70,7 +70,7 @@ router.get('/', async (req, res) => {
     }
     
     const products = await Product.find(query)
-      .populate('owner', 'name email')
+      .populate('owner', 'name email phone')
       .sort({ createdAt: -1 });
     res.json(products);
   } catch (error) {
@@ -82,7 +82,7 @@ router.get('/', async (req, res) => {
 router.get('/user/:userId', async (req, res) => {
   try {
     const products = await Product.find({ owner: req.params.userId })
-      .populate('owner', 'name email')
+      .populate('owner', 'name email phone')
       .sort({ createdAt: -1 });
     res.json(products);
   } catch (error) {
