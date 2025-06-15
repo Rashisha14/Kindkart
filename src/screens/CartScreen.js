@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BASE_URL } from '../config/api';
+import { API_URL, BASE_URL } from '../config/api';
 
 const CartScreen = ({ navigation }) => {
   const [cartItems, setCartItems] = useState([]);
@@ -41,7 +41,12 @@ const CartScreen = ({ navigation }) => {
         const cartKey = `cart_${user._id}`;
         const cart = await AsyncStorage.getItem(cartKey);
         if (cart) {
-          setCartItems(JSON.parse(cart));
+          const cartItems = JSON.parse(cart);
+          // Filter out sold items from cart
+          const activeItems = cartItems.filter(item => !item.isSold);
+          // Update cart with only active items
+          await AsyncStorage.setItem(cartKey, JSON.stringify(activeItems));
+          setCartItems(activeItems);
         }
 
         // Load bought items for the current user
@@ -130,7 +135,12 @@ const CartScreen = ({ navigation }) => {
     try {
       // Record buy interest on the backend
       const token = await AsyncStorage.getItem('token');
-      const response = await fetch(`${BASE_URL}/buyinterests`, {
+      if (!token) {
+        Alert.alert('Authentication Error', 'Please login again.');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/buy-interests`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -144,7 +154,7 @@ const CartScreen = ({ navigation }) => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to record buy interest');
+        throw new Error(errorData.message || 'Failed to record buy interest.');
       }
 
       // Mark item as bought for the current user in local storage
@@ -159,13 +169,15 @@ const CartScreen = ({ navigation }) => {
         [
           {
             text: 'OK',
-            onPress: () => {},
+            onPress: () => {
+              // No need to close modal here, it's handled by state update
+            },
           },
         ]
       );
     } catch (error) {
       console.error('Error recording buy interest:', error);
-      Alert.alert('Error', error.message || 'Failed to record your interest. Please try again.');
+      Alert.alert('Error', error.message || 'Failed to record buy interest. Please try again.');
     }
   };
 
@@ -183,6 +195,9 @@ const CartScreen = ({ navigation }) => {
         <Text style={styles.itemTitle}>{item.title}</Text>
         <Text style={styles.itemPrice}>₹{item.price}</Text>
         <Text style={styles.ownerInfo}>Seller: {item.owner.name}</Text>
+        {item.isSold && (
+          <Text style={[styles.itemStatus, styles.soldItemStatus]}>Status: Sold</Text>
+        )}
       </View>
       <TouchableOpacity
         style={styles.removeButton}
@@ -225,6 +240,9 @@ const CartScreen = ({ navigation }) => {
                 <Text style={styles.detailTitle}>{selectedItem?.title}</Text>
                 <Text style={styles.detailPrice}>₹{selectedItem?.price}</Text>
                 <Text style={styles.detailDescription}>{selectedItem?.description}</Text>
+                {selectedItem?.isSold && (
+                  <Text style={[styles.detailStatus, styles.soldStatus]}>Status: Sold</Text>
+                )}
               </View>
 
               {/* Owner Details (always shown now) */}
@@ -558,6 +576,22 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     marginBottom: 15,
+  },
+  detailStatus: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 5,
+  },
+  soldStatus: {
+    color: '#FF4B81',
+  },
+  itemStatus: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 5,
+  },
+  soldItemStatus: {
+    color: '#FF4B81',
   },
 });
 

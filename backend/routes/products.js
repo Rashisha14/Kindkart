@@ -102,4 +102,35 @@ router.delete('/image/:id', auth, async (req, res) => {
   }
 });
 
+// Mark a product as sold
+router.put('/:id/mark-sold', auth, async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const userId = req.user._id; // Authenticated user's ID
+
+    const product = await Product.findById(productId);
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    // Check if the authenticated user is the owner of the product
+    if (product.owner.toString() !== userId.toString()) {
+      return res.status(403).json({ message: 'Not authorized to mark this product as sold' });
+    }
+
+    if (product.isSold) {
+      return res.status(400).json({ message: 'Product is already marked as sold' });
+    }
+
+    product.isSold = true;
+    await product.save();
+
+    res.json({ message: 'Product marked as sold successfully', product });
+  } catch (error) {
+    console.error('Error marking product as sold:', error);
+    res.status(500).json({ message: 'Error marking product as sold', error: error.message });
+  }
+});
+
 module.exports = router; 

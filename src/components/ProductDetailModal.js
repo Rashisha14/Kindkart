@@ -122,6 +122,11 @@ const ProductDetailModal = ({ visible, product, onClose, onContact }) => {
                 <Text style={styles.productTitle}>{product.title}</Text>
                 <Text style={styles.productDescription}>{product.description}</Text>
                 <Text style={styles.productPrice}>₹{product.price}</Text>
+                {product.isSold && (
+                  <View style={styles.soldStatusContainer}>
+                    <Text style={styles.soldStatusText}>SOLD</Text>
+                  </View>
+                )}
               </View>
 
               {/* Contact Button */}
@@ -133,12 +138,14 @@ const ProductDetailModal = ({ visible, product, onClose, onContact }) => {
               </TouchableOpacity>
 
               {/* Cart Button */}
-              <TouchableOpacity 
-                style={styles.cartButton}
-                onPress={handleCartPress}
-              >
-                <Ionicons name="cart-outline" size={24} color="#666" />
-              </TouchableOpacity>
+              {!product.isSold && (
+                <TouchableOpacity 
+                  style={styles.cartButton}
+                  onPress={handleCartPress}
+                >
+                  <Ionicons name="cart-outline" size={24} color="#666" />
+                </TouchableOpacity>
+              )}
             </>
           ) : (
             <ScrollView style={styles.cartContainer}>
@@ -169,12 +176,18 @@ const ProductDetailModal = ({ visible, product, onClose, onContact }) => {
               </View>
 
               {/* Add to Cart Button */}
-              <TouchableOpacity 
-                style={styles.addToCartButton}
-                onPress={handleAddToCart}
-              >
-                <Text style={styles.addToCartButtonText}>Add to Cart</Text>
-              </TouchableOpacity>
+              {!product.isSold ? (
+                <TouchableOpacity 
+                  style={styles.addToCartButton}
+                  onPress={handleAddToCart}
+                >
+                  <Text style={styles.addToCartButtonText}>Add to Cart</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.soldButtonContainer}>
+                  <Text style={styles.soldButtonText}>This item has been sold</Text>
+                </View>
+              )}
             </ScrollView>
           )}
         </View>
@@ -308,6 +321,31 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   addToCartButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  soldStatusContainer: {
+    backgroundColor: '#DC3545',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    marginBottom: 20,
+  },
+  soldStatusText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  soldButtonContainer: {
+    backgroundColor: '#DC3545',
+    borderRadius: 25,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  soldButtonText: {
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',

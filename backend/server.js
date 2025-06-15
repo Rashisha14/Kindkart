@@ -5,7 +5,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
-const buyInterestRoutes = require('./routes/buyinterests');
+const buyInterestRoutes = require('./routes/buyInterests');
 
 dotenv.config();
 
@@ -85,7 +85,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/kindkart'
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
-app.use('/api/buyinterests', buyInterestRoutes);
+app.use('/api/buy-interests', buyInterestRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
