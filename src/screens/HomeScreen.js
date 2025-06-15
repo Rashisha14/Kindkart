@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { API_URL, BASE_URL } from '../config/api';
 import ProductDetailModal from '../components/ProductDetailModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Import SVG icons
 import ElectronicsIcon from '../../assets/icons/electronicdevices.svg';
@@ -39,10 +40,34 @@ const HomeScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
 
   useEffect(() => {
     fetchProducts();
+    loadCartCount();
   }, []);
+
+  const loadCartCount = async () => {
+    try {
+      const userData = await AsyncStorage.getItem('userData');
+      if (userData) {
+        const user = JSON.parse(userData);
+        const cartKey = `cart_${user._id}`;
+        const cart = await AsyncStorage.getItem(cartKey);
+        if (cart) {
+          const cartItems = JSON.parse(cart);
+          setCartCount(cartItems.length);
+        } else {
+          setCartCount(0);
+        }
+      } else {
+        setCartCount(0);
+      }
+    } catch (error) {
+      console.error('Error loading cart count:', error);
+      setCartCount(0);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -131,7 +156,7 @@ const HomeScreen = ({ navigation }) => {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('AccountDetails')}>
           <Ionicons name="menu" size={24} color="white" />
         </TouchableOpacity>
         <Image 
@@ -250,8 +275,18 @@ const HomeScreen = ({ navigation }) => {
         <TouchableOpacity style={styles.navItem}>
           <Ionicons name="search" size={24} color="#666" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="cart" size={24} color="#666" />
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => navigation.navigate('Cart')}
+        >
+          <View>
+            <Ionicons name="cart" size={24} color="#666" />
+            {cartCount > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>{cartCount}</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -262,6 +297,7 @@ const HomeScreen = ({ navigation }) => {
         onClose={() => {
           setModalVisible(false);
           setSelectedProduct(null);
+          loadCartCount(); // Reload cart count when modal is closed
         }}
         onContact={handleContact}
       />
@@ -438,6 +474,23 @@ const styles = StyleSheet.create({
   },
   navItem: {
     alignItems: 'center',
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#FF4B81',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  cartBadgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });
 

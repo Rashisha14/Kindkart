@@ -3,6 +3,7 @@ import { StyleSheet, View, TouchableOpacity, ScrollView, KeyboardAvoidingView, P
 import { TextInput, Button, Text, Surface, Checkbox, HelperText } from 'react-native-paper';
 import Logo from '../components/Logo';
 import { API_URL } from '../config/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SignupScreen = ({ navigation }) => {
   const [name, setName] = useState('');
@@ -105,6 +106,14 @@ const SignupScreen = ({ navigation }) => {
         if (!response.ok) {
           throw new Error(data.message || 'Failed to sign up');
         }
+
+        // Store user data with correct ID field
+        const userData = {
+          ...data.user,
+          _id: data.user.id // Map id to _id for consistency
+        };
+        await AsyncStorage.setItem('userData', JSON.stringify(userData));
+        await AsyncStorage.setItem('token', data.token);
 
         Alert.alert(
           'Success',

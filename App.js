@@ -10,6 +10,8 @@ import HomeScreen from './src/screens/HomeScreen';
 import CustomSplashScreen from './src/screens/SplashScreen';
 import SellProductScreen from './src/screens/SellProductScreen';
 import CategoryScreen from './src/screens/CategoryScreen';
+import CartScreen from './src/screens/CartScreen';
+import AccountDetailsScreen from './src/screens/AccountDetailsScreen';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -80,6 +82,8 @@ export default function App() {
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="SellProduct" component={SellProductScreen} />
             <Stack.Screen name="Category" component={CategoryScreen} />
+            <Stack.Screen name="Cart" component={CartScreen} />
+            <Stack.Screen name="AccountDetails" component={AccountDetailsScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </PaperProvider>

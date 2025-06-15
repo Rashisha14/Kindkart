@@ -78,6 +78,19 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get products listed by a specific user
+router.get('/user/:userId', async (req, res) => {
+  try {
+    const products = await Product.find({ owner: req.params.userId })
+      .populate('owner', 'name email')
+      .sort({ createdAt: -1 });
+    res.json(products);
+  } catch (error) {
+    console.error('Error fetching user products:', error);
+    res.status(500).json({ message: 'Error fetching user products', error: error.message });
+  }
+});
+
 // Delete image
 router.delete('/image/:id', auth, async (req, res) => {
   try {

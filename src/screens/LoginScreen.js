@@ -91,11 +91,13 @@ const LoginScreen = ({ navigation }) => {
       console.log('Storing authentication token...');
       await AsyncStorage.setItem('token', data.token);
 
-      // Store user data only if rememberMe is true
-      if (rememberMe) {
-        console.log('Storing user data...');
-        await AsyncStorage.setItem('user', JSON.stringify(data.user));
-      }
+      // Store user data with correct ID field
+      console.log('Storing user data...');
+      const userData = {
+        ...data.user,
+        _id: data.user.id // Map id to _id for consistency
+      };
+      await AsyncStorage.setItem('userData', JSON.stringify(userData));
 
       console.log('Login successful, navigating to Home screen...');
       navigation.replace('Home');
