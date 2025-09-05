@@ -6,6 +6,9 @@
   <a href="#"><img src="https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js"></a>
   <a href="#"><img src="https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express&logoColor=white" alt="Express.js"></a>
   <a href="#"><img src="https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB"></a>
+  <a href="#"><img src="https://img.shields.io/badge/JWT-000000?style=for-the-badge&logo=JSON%20web%20tokens&color=red" alt="JWT"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Expo-4630EB?style=for-the-badge&logo=expo&logoColor=white" alt="Expo"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Cloudinary-21293D?style=for-the-badge&logo=cloudinary&logoColor=white" alt="Cloudinary"></a>
 </p>
 
 KindKart is a mobile e-commerce platform built with React Native, providing a seamless experience for users to buy and sell products. The application features user authentication, product listings, cart management, and secure transactions. The backend is powered by Node.js with Express, ensuring scalability and robustness.
